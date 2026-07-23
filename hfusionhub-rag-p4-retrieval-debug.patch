@@ -1,0 +1,412 @@
+diff --git a/python-ai/app/core/rag/query_router.py b/python-ai/app/core/rag/query_router.py
+--- a/python-ai/app/core/rag/query_router.py
++++ b/python-ai/app/core/rag/query_router.py
+@@ -679,6 +679,8 @@
+         Returns:
+             MergedResult 合并后的结果
+         """
++        started_at = time.perf_counter()
++
+         # 1. 路由
+         route_result = self.route(query, query_type, strategy)
+ 
+@@ -694,12 +696,14 @@
+             self.max_candidates,
+         )
+         results_by_channel: Dict[ChannelType, List[SearchResult]] = {}
++        channel_latencies_ms: Dict[str, float] = {}
+ 
+         if route_result.strategy == RouteStrategy.CASCADING:
+             # 级联检索：第一个通道结果足够则不查第二个
+             for channel_type in route_result.selected_channels:
+                 channel = self.channels.get(channel_type)
+                 if channel:
++                    channel_started_at = time.perf_counter()
+                     results = await channel.search(
+                         query=query,
+                         knowledge_base_id=knowledge_base_id,
+@@ -707,6 +711,9 @@
+                         **kwargs
+                     )
+                     results_by_channel[channel_type] = results
++                    channel_latencies_ms[channel_type.value] = round(
++                        (time.perf_counter() - channel_started_at) * 1000, 2
++                    )
+ 
+                     # 如果结果足够，停止检索
+                     if len(results) >= candidate_top_k:
+@@ -720,11 +727,12 @@
+                 if channel:
+                     tasks.append((
+                         channel_type,
+-                        channel.search(
++                        self._search_channel(
++                            channel=channel,
+                             query=query,
+                             knowledge_base_id=knowledge_base_id,
+                             top_k=candidate_top_k,
+-                            **kwargs
++                            **kwargs,
+                         ),
+                     ))
+ 
+@@ -732,15 +740,60 @@
+                 results_list = await asyncio.gather(
+                     *(task for _, task in tasks), return_exceptions=True
+                 )
+-                for (channel_type, _), results in zip(tasks, results_list):
+-                    if isinstance(results, list):
++                for (channel_type, _), result in zip(tasks, results_list):
++                    if isinstance(result, tuple):
++                        results, latency_ms = result
+                         results_by_channel[channel_type] = results
++                        channel_latencies_ms[channel_type.value] = latency_ms
+ 
+         # 3. 合并结果
+         merged = self._merge_results(results_by_channel, top_k, route_result)
++        merged.metadata.update({
++            "channel_candidates": self._debug_candidates(results_by_channel),
++            "channel_latencies_ms": channel_latencies_ms,
++            "router_latency_ms": round((time.perf_counter() - started_at) * 1000, 2),
++        })
+ 
+         return merged
+ 
++    @staticmethod
++    async def _search_channel(
++        channel: BaseChannel,
++        query: str,
++        knowledge_base_id: int,
++        top_k: int,
++        **kwargs,
++    ) -> Tuple[List[SearchResult], float]:
++        """Execute one channel and retain its latency for the debug trace."""
++        started_at = time.perf_counter()
++        results = await channel.search(
++            query=query,
++            knowledge_base_id=knowledge_base_id,
++            top_k=top_k,
++            **kwargs,
++        )
++        return results, round((time.perf_counter() - started_at) * 1000, 2)
++
++    @staticmethod
++    def _debug_candidates(
++        results_by_channel: Dict[ChannelType, List[SearchResult]],
++    ) -> Dict[str, List[Dict[str, Any]]]:
++        """Normalize raw channel candidates without exposing full chunk text."""
++        return {
++            channel_type.value: [
++                {
++                    "rank": rank,
++                    "chunk_id": result.metadata.get("chunk_id"),
++                    "document_id": result.document_id,
++                    "knowledge_base_id": result.metadata.get("knowledge_base_id"),
++                    "score": round(result.score, 6),
++                    "content_preview": result.content[:500],
++                }
++                for rank, result in enumerate(results, start=1)
++            ]
++            for channel_type, results in results_by_channel.items()
++        }
++
+     def _merge_results(
+         self,
+         results_by_channel: Dict[ChannelType, List[SearchResult]],
+diff --git a/python-ai/app/core/rag/postprocessor.py b/python-ai/app/core/rag/postprocessor.py
+--- a/python-ai/app/core/rag/postprocessor.py
++++ b/python-ai/app/core/rag/postprocessor.py
+@@ -61,28 +61,68 @@
+         Returns:
+             处理后的结果列表
+         """
+-        # 1. 转换为 ProcessedResult
++        processed, _ = self.process_with_debug(results, top_k=top_k)
++        return processed
++
++    def process_with_debug(
++        self,
++        results: List[Dict],
++        top_k: int = 5,
++    ) -> tuple[List[ProcessedResult], List[Dict]]:
++        """Process results and retain an auditable decision for every input."""
+         processed = [self._to_processed(r) for r in results]
++        decisions = [
++            {
++                "input_rank": rank,
++                "chunk_id": result.metadata.get("chunk_id"),
++                "document_id": result.document_id,
++                "source": result.source,
++                "score": round(result.score, 6),
++                "evidence_score": round(result.metadata.get("evidence_score", result.score), 6),
++                "decision": "pending",
++            }
++            for rank, result in enumerate(processed, start=1)
++        ]
+ 
+         # 2. 过滤低质量证据。Hybrid RRF score represents rank and is not a
+         # confidence score, so use the best original channel score when it is
+         # present. This keeps P0's "no sufficient evidence" safety contract
+         # intact while allowing rank fusion to decide result order.
+-        processed = [
+-            r for r in processed
+-            if r.metadata.get("evidence_score", r.score) >= self.min_score
+-        ]
++        evidence_accepted: List[tuple[ProcessedResult, int]] = []
++        for index, result in enumerate(processed):
++            if result.metadata.get("evidence_score", result.score) < self.min_score:
++                decisions[index]["decision"] = "filtered_low_evidence"
++            else:
++                evidence_accepted.append((result, index))
+ 
+         # 3. 去重
+-        processed = self._deduplicate(processed)
++        deduplicated: List[tuple[ProcessedResult, int]] = []
++        for result, index in evidence_accepted:
++            duplicate_of = next((
++                existing_index
++                for existing, existing_index in deduplicated
++                if self._calculate_similarity(result.content, existing.content) >= self.dedup_threshold
++            ), None)
++            if duplicate_of is not None:
++                decisions[index]["decision"] = "filtered_duplicate"
++                decisions[index]["duplicate_of_input_rank"] = duplicate_of + 1
++            else:
++                deduplicated.append((result, index))
+ 
+         # 4. 排序
+-        processed = self._sort(processed)
++        deduplicated.sort(key=lambda item: item[0].score, reverse=True)
+ 
+         # 5. 截取 top_k
+-        processed = processed[:top_k]
++        accepted: List[ProcessedResult] = []
++        for rank, (result, index) in enumerate(deduplicated, start=1):
++            if rank <= top_k:
++                decisions[index]["decision"] = "accepted"
++                decisions[index]["final_rank"] = rank
++                accepted.append(result)
++            else:
++                decisions[index]["decision"] = "trimmed_top_k"
+ 
+-        return processed
++        return accepted, decisions
+ 
+     def _to_processed(self, result: Dict) -> ProcessedResult:
+         """将字典转换为 ProcessedResult"""
+diff --git a/python-ai/app/core/rag/retriever.py b/python-ai/app/core/rag/retriever.py
+--- a/python-ai/app/core/rag/retriever.py
++++ b/python-ai/app/core/rag/retriever.py
+@@ -172,24 +172,46 @@
+         routes: List[Dict[str, Any]] = []
+         processed: List[ProcessedResult] = []
+         queries = [query]
++        channel_candidates: List[Dict[str, Any]] = []
++        postprocessing: List[Dict[str, Any]] = []
++        stage_timings_ms: Dict[str, float] = {}
+         error: Optional[str] = None
+ 
+         try:
+             # 1. 问题重写
+             if enable_rewrite and conversation_history:
++                rewrite_started_at = time.perf_counter()
+                 rewrite_result = self.query_rewriter.rewrite(query, conversation_history)
+                 queries = rewrite_result.rewritten_queries or [query]
++                stage_timings_ms["rewrite"] = round(
++                    (time.perf_counter() - rewrite_started_at) * 1000, 2
++                )
+ 
+             # 2. 路由到向量、关键词或图谱通道。
+             all_results = []
+             for rewritten_query in queries:
++                router_started_at = time.perf_counter()
+                 merged = await self.router.search(
+                     query=rewritten_query,
+                     knowledge_base_id=knowledge_base_id,
+                     top_k=top_k,
+                 )
+                 route = merged.metadata.get("route_result", {})
+-                routes.append({"query": rewritten_query, **route})
++                routes.append({
++                    "query": rewritten_query,
++                    **route,
++                    "router_latency_ms": merged.metadata.get("router_latency_ms"),
++                    "channel_latencies_ms": merged.metadata.get("channel_latencies_ms", {}),
++                })
++                channel_candidates.append({
++                    "query": rewritten_query,
++                    "candidates": merged.metadata.get("channel_candidates", {}),
++                })
++                stage_timings_ms["router"] = round(
++                    stage_timings_ms.get("router", 0.0)
++                    + (time.perf_counter() - router_started_at) * 1000,
++                    2,
++                )
+                 all_results.extend({
+                     "content": item.content,
+                     "score": item.score,
+@@ -201,7 +223,13 @@
+                 } for item in merged.results)
+ 
+             # 3. 后处理（去重、排序）
+-            processed = self.postprocessor.process(all_results, top_k=top_k)
++            postprocess_started_at = time.perf_counter()
++            processed, postprocessing = self.postprocessor.process_with_debug(
++                all_results, top_k=top_k
++            )
++            stage_timings_ms["postprocess"] = round(
++                (time.perf_counter() - postprocess_started_at) * 1000, 2
++            )
+             result = RetrievalResult(
+                 query=query,
+                 results=processed,
+@@ -210,6 +238,7 @@
+                     "knowledge_base_id": knowledge_base_id,
+                     "query_count": len(queries),
+                     "total_results": len(all_results),
++                    "rewritten_queries": queries,
+                 },
+             )
+             logger.info(
+@@ -231,16 +260,24 @@
+                 }
+                 for result in processed
+             ]
+-            get_trace_store().record(RetrievalTrace(
++            trace = get_trace_store().record(RetrievalTrace(
+                 query=query,
+                 knowledge_base_id=knowledge_base_id,
+                 top_k=top_k,
+                 routes=routes,
+                 results=trace_results,
++                debug={
++                    "rewritten_queries": queries,
++                    "channel_candidates": channel_candidates,
++                    "postprocessing": postprocessing,
++                    "stage_timings_ms": stage_timings_ms,
++                },
+                 rewrite_count=len(queries),
+                 latency_ms=round((time.perf_counter() - started_at) * 1000, 2),
+                 error=error,
+             ))
++            if 'result' in locals():
++                result.metadata["trace_id"] = trace.trace_id
+ 
+     async def retrieve_for_prompt(
+         self,
+diff --git a/python-ai/app/core/rag/observability.py b/python-ai/app/core/rag/observability.py
+--- a/python-ai/app/core/rag/observability.py
++++ b/python-ai/app/core/rag/observability.py
+@@ -22,6 +22,7 @@
+     top_k: int
+     routes: List[Dict[str, Any]] = field(default_factory=list)
+     results: List[Dict[str, Any]] = field(default_factory=list)
++    debug: Dict[str, Any] = field(default_factory=dict)
+     rewrite_count: int = 1
+     latency_ms: float = 0.0
+     error: Optional[str] = None
+diff --git a/python-ai/app/api/rag.py b/python-ai/app/api/rag.py
+--- a/python-ai/app/api/rag.py
++++ b/python-ai/app/api/rag.py
+@@ -25,6 +25,16 @@
+     cases: List[EvaluationCaseRequest] = Field(min_length=1, max_length=200)
+ 
+ 
++class RetrievalDebugRequest(BaseModel):
++    """Execute one scoped retrieval and return its full diagnostic trace."""
++
++    query: str = Field(min_length=1, max_length=4000)
++    knowledge_base_id: int = Field(ge=1)
++    top_k: int = Field(default=5, ge=1, le=20)
++    conversation_history: Optional[List[Dict[str, Any]]] = Field(default=None, max_length=50)
++    enable_rewrite: bool = True
++
++
+ @router.get("/traces")
+ async def list_traces(
+     limit: int = Query(default=50, ge=1, le=200),
+@@ -86,6 +96,23 @@
+     return trace
+ 
+ 
++@router.post("/debug/search")
++async def debug_search(request: RetrievalDebugRequest):
++    """Run an explicitly scoped retrieval and expose why each result survived."""
++    retrieval = await get_retriever().retrieve(
++        query=request.query,
++        knowledge_base_id=request.knowledge_base_id,
++        conversation_history=request.conversation_history,
++        top_k=request.top_k,
++        enable_rewrite=request.enable_rewrite,
++    )
++    trace_id = retrieval.metadata.get("trace_id")
++    trace = get_trace_store().get(trace_id) if trace_id else None
++    if trace is None:
++        raise HTTPException(status_code=500, detail="Retrieval debug trace was not recorded")
++    return trace
++
++
+ @router.post("/evaluate")
+ async def evaluate_retrieval(request: EvaluationRequest):
+     evaluator = RetrievalEvaluator(get_retriever())
+diff --git a/python-ai/tests/test_rag_observability.py b/python-ai/tests/test_rag_observability.py
+--- a/python-ai/tests/test_rag_observability.py
++++ b/python-ai/tests/test_rag_observability.py
+@@ -28,7 +28,18 @@
+                     "strategy": "multi",
+                     "confidence": 0.8,
+                     "selected_channels": ["vector"],
+-                }
++                },
++                "channel_candidates": {
++                    "vector": [{
++                        "rank": 1,
++                        "chunk_id": "chunk-42",
++                        "document_id": 42,
++                        "knowledge_base_id": knowledge_base_id,
++                        "score": 0.92,
++                    }]
++                },
++                "channel_latencies_ms": {"vector": 1.5},
++                "router_latency_ms": 2.0,
+             },
+         )
+ 
+@@ -59,6 +70,9 @@
+     assert traces[0]["knowledge_base_id"] == 7
+     assert traces[0]["routes"][0]["selected_channels"] == ["vector"]
+     assert traces[0]["results"][0]["document_id"] == 42
++    assert traces[0]["debug"]["channel_candidates"][0]["candidates"]["vector"][0]["chunk_id"] == "chunk-42"
++    assert traces[0]["debug"]["postprocessing"][0]["decision"] == "accepted"
++    assert traces[0]["debug"]["stage_timings_ms"]["postprocess"] >= 0
+ 
+ 
+ @pytest.mark.asyncio
+@@ -96,6 +110,27 @@
+     assert stats.json()["total_traces"] == 1
+ 
+ 
++def test_debug_search_api_returns_a_scoped_full_trace(monkeypatch):
++    reset_trace_store()
++    retriever = MultiChannelRetriever(postprocessor=get_postprocessor())
++    retriever.router = FakeRouter()
++    monkeypatch.setattr(rag_api, "get_retriever", lambda: retriever)
++    client = TestClient(create_app())
++
++    response = client.post("/api/rag/debug/search", json={
++        "query": "What is RAG?",
++        "knowledge_base_id": 7,
++        "top_k": 3,
++        "enable_rewrite": False,
++    })
++
++    assert response.status_code == 200
++    payload = response.json()
++    assert payload["knowledge_base_id"] == 7
++    assert payload["debug"]["channel_candidates"][0]["candidates"]["vector"][0]["chunk_id"] == "chunk-42"
++    assert payload["debug"]["postprocessing"][0]["decision"] == "accepted"
++
++
+ def test_trace_api_filters_paginates_and_exports_records():
+     reset_trace_store()
+     trace_store = get_trace_store()
