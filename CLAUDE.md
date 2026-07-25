@@ -12,7 +12,7 @@ HFusionHub/
 ├── python-ai/              # FastAPI AI service (port 9000)
 ├── hfusionhub-frontend/    # Vue 3 + Vite + TypeScript SPA (port 3000)
 ├── docker/                 # Docker Compose: MySQL 8.0 + Redis 7
-├── milvus-docker/          # Milvus + etcd + MinIO + Attu
+├── milvus-docker/          # REMOVED — Python uses Milvus Lite
 ├── scripts/                # PowerShell verification scripts
 └── .github/workflows/      # CI pipeline
 ```
@@ -23,16 +23,25 @@ HFusionHub/
 ```bash
 cd java-backend
 mvn spring-boot:run          # Run dev server
-mvn test                      # Run all tests
+mvn test                      # Run all tests (H2 in-memory DB)
 mvn test -Dtest=HealthControllerTest  # Run single test
+mvn test -P itest             # Run with Testcontainers (needs Docker)
 mvn package                   # Build JAR
 ```
 
 ### Python AI Service
 ```bash
 cd python-ai
-pip install -r requirements.txt              # Install deps
+# Use a project-local virtual environment
+python -m venv .venv
+source .venv/bin/activate   # Linux/macOS
+.venv\Scripts\activate      # Windows
+
+pip install -r requirements.txt              # Install deps (pip-compile locked)
 pip install -r requirements-dev.txt          # Install test deps
+# To update locked dependencies:
+# pip-compile requirements.in requirements-dev.in
+
 python -m app.main                           # Run dev server
 pytest -q tests                              # Run all tests
 pytest -q tests/test_retriever.py            # Run single test file
@@ -51,13 +60,21 @@ npm run preview                               # Preview production build
 ### Infrastructure
 ```bash
 cd docker && docker compose up -d             # Start MySQL + Redis
-cd milvus-docker && docker compose up -d      # Start Milvus vector DB
 ```
 
-### CI (runs on push/PR to main — 3 parallel jobs)
+### First Deployment — Admin Setup
 ```bash
-# Python tests, Java tests, and Frontend build run in parallel
-# No linting/formatting is configured for any subproject
+# Set ADMIN_PASSWORD to bootstrap the admin account on first startup
+export ADMIN_PASSWORD=YourSecurePassword
+cd java-backend && mvn spring-boot:run
+# AdminInitializer creates the admin user automatically.
+# Without ADMIN_PASSWORD, no admin account is created.
+```
+
+### CI (runs on push/PR to main — 4 parallel jobs)
+```bash
+# Docker Compose validation, Python tests, Java tests (+ Flyway migration),
+# and Frontend build + audit run in parallel
 ```
 
 ## Architecture Overview
@@ -137,9 +154,9 @@ MySQL with MyBatis Plus. Key tables:
 - `sys_user`, `knowledge_base`, `document`, `document_chunk`, `document_index_job`
 - `conversation`, `message` (with JSON `sources` field and `token_count`)
 - Logical delete via `deleted` column on all major tables
-- Default admin: `admin` / `admin123`
-
-SQL migrations at `java-backend/src/main/resources/sql/`.
+- Admin user is created via `ADMIN_PASSWORD` env var (no default password)
+- Flyway migrations at `java-backend/src/main/resources/db/migration/`
+- Legacy SQL scripts at `java-backend/src/main/resources/sql/`
 
 ## Key Data Flows
 
@@ -160,11 +177,13 @@ SQL migrations at `java-backend/src/main/resources/sql/`.
 
 | Subproject | Runner | Test count | Location |
 |---|---|---|---|
-| python-ai | pytest + pytest-asyncio | 333 RAG test cases | `python-ai/tests/` |
-| java-backend | JUnit (spring-boot-starter-test) | 2 test files | `java-backend/src/test/` |
-| frontend | None configured | — | — |
+| python-ai | pytest + pytest-asyncio | 615+ test cases across 27 files | `python-ai/tests/` |
+| java-backend | JUnit 5 + H2 (spring-boot-starter-test) | 4 tests | `java-backend/src/test/` |
+| frontend | npm audit only (no test framework) | — | — |
 
-333 RAG test cases across 28 files covering: intent classification, query decomposition, context compression, self-reflection, query routing, multi-turn strategies, knowledge graph, chunk quality, multimodal, agent workflows, observability, API security.
+Java tests use H2 in-memory database (MySQL compatibility mode) via the `test` Spring profile.
+Flyway is disabled in tests; schema is loaded from `src/test/resources/schema-h2.sql`.
+For full integration tests against real MySQL, use the `itest` Maven profile (`mvn test -P itest`).
 
 ## Design Patterns
 
