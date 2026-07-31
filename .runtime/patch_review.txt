@@ -1,0 +1,10 @@
+Findings for Step 7:
+- executeRun line 311 uses latch.await() forever. Add await(timeoutSeconds, SECONDS), dispose on false.
+- line 268 run_completed/run_error only terminalReceived=true; must latch.countDown() there, otherwise waits on Flux completion.
+- Reactor .timeout alone error callback race: timeout error callback should only signal latch; avoid double handleExecutionTimeout; atomic guarded completeRun handles idempotency but status event/retry can duplicate if both paths handle.
+- timeout handling should dispose subscription, aiClient.cancelRequest(runUuid), completeRunGuarded running->timed_out with ERR_EXECUTION_TIMEOUT, update task only if currentRunId matches, record RUN_TIMED_OUT, then handleTerminalFailure; completeRunGuarded leaves lease fields NULL; finally remove inflight and releaseLease harmless.
+- application.yml already default timeout 600 but retryable-error-codes excludes execution_timeout, overriding AgentConstants default. Add execution_timeout to config or retry won't schedule.
+- completeRunGuarded has status guard and clears lease. AgentTaskService.completeRun also does guarded update and task propagation, but direct mapper timeout needs explicit task update.
+- Existing tests no executeRun coverage. Add unit/integration never-ending Flux test and idempotency test.
+- Existing handleRunCompleted maps Python completed->succeeded, records RUN_SUCCEEDED; only countDown needed.
+- Watchdog remains orphan/lease-expired fallback; do not rely on it for normal execution timeout.
