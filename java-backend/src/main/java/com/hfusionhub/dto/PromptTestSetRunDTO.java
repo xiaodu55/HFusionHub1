@@ -4,19 +4,16 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Data;
 
-import java.util.List;
+import java.time.LocalDateTime;
 
-/** 批量运行测试用例集的整体响应 */
+/** 单次批量运行历史记录（列表项） */
 @Data
 @Builder
-@Schema(description = "批量运行测试用例集的整体响应")
-public class PromptTestSetRunResponse {
+@Schema(description = "单次批量运行历史记录")
+public class PromptTestSetRunDTO {
 
-    @Schema(description = "用例集 ID")
-    private Long setId;
-
-    @Schema(description = "本次运行记录 ID（用于历史与对比）")
-    private Long runId;
+    @Schema(description = "运行记录 ID")
+    private Long id;
 
     @Schema(description = "来源模板 ID（可选）")
     private Long templateId;
@@ -26,6 +23,12 @@ public class PromptTestSetRunResponse {
 
     @Schema(description = "来源模板名称（可选）")
     private String templateName;
+
+    @Schema(description = "实际执行/保存的模板内容快照（绑定模板时为数据库真实内容）")
+    private String templateContent;
+
+    @Schema(description = "关联知识库 ID（可选）")
+    private Long knowledgeBaseId;
 
     @Schema(description = "用例总数")
     private int totalCases;
@@ -39,6 +42,6 @@ public class PromptTestSetRunResponse {
     @Schema(description = "总耗时（毫秒）")
     private long totalElapsedMs;
 
-    @Schema(description = "各用例运行结果（顺序与用例排序一致）")
-    private List<PromptTestCaseResult> results;
+    @Schema(description = "运行时间")
+    private LocalDateTime createdAt;
 }
