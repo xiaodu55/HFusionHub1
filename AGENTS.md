@@ -193,3 +193,7 @@ For full integration tests against real MySQL, use the `itest` Maven profile (`m
 - **CQRS-like**: Java owns write path (documents, conversations), Python owns read/retrieval path
 - **Idempotent indexing**: `document_index_job.index_version` prevents duplicate processing
 - **Defense in depth**: KB ownership verified at Java (Sa-Token) and Python (callback secrets)
+
+## Claude Code 会话记忆
+
+当需要了解该项目在此前的 Claude Code 会话中讨论过的问题、已完成的修复或决策时，读取 `CLAUDE_MEMORY.md`（精简提取版，约 48KB）。该文件由脚本从 `~/.claude/projects/d--college-development-0-HFusionHub/*.jsonl` 会话记录自动提取，仅含有效用户提问与 AI 回答。原始完整版为 `CLAUDE_SESSIONS_MEMORY.md`（约 2MB，含工具调用细节，非必要不读取）。如需重新生成：运行 `python C:\Users\15790\AppData\Local\Temp\opencode\extract_claude_sessions.py`。
