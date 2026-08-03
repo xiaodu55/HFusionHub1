@@ -71,10 +71,14 @@ cd java-backend && mvn spring-boot:run
 # Without ADMIN_PASSWORD, no admin account is created.
 ```
 
-### CI (runs on push/PR to main — 4 parallel jobs)
+### CI (runs on push/PR to main — parallel jobs)
 ```bash
 # Docker Compose validation, Python tests, Java tests (+ Flyway migration),
-# and Frontend build + audit run in parallel
+# Frontend build + audit, and the Phase-2 offline evaluation gate (eval-offline)
+# run in parallel. eval-offline runs python-ai/scripts/eval_offline.py
+# --fail-on-regression — gate failure or baseline regression blocks the merge.
+# Nightly runtime evaluation runs via .github/workflows/eval-nightly.yml.
+# See docs/CI_GATES.md.
 ```
 
 ## Architecture Overview
