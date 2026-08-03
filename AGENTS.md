@@ -39,8 +39,9 @@ source .venv/bin/activate   # Linux/macOS
 
 pip install -r requirements.txt              # Install deps (pip-compile locked)
 pip install -r requirements-dev.txt          # Install test deps
-# To update locked dependencies:
-# pip-compile requirements.in requirements-dev.in
+# To update locked dependencies (rebuild locks separately; never compile the two input files together):
+# pip-compile --generate-hashes --allow-unsafe --output-file=requirements.txt requirements.in
+# pip-compile --generate-hashes --allow-unsafe --output-file=requirements-dev.txt requirements-dev.in
 
 python -m app.main                           # Run dev server
 pytest -q tests                              # Run all tests
