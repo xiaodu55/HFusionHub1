@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Repository Structure
 
@@ -8,11 +8,11 @@ HFusionHub is a **three-tier monorepo** enterprise AI Agent platform with a Java
 
 ```
 HFusionHub/
-├── java-backend/           # Spring Boot 3.2.5 backend (port 8080)
+├── java-backend/           # Spring Boot 3.2.5 backend (port 8080, /api context-path)
 ├── python-ai/              # FastAPI AI service (port 9000)
-├── hfusionhub-frontend/    # Vue 3 + Vite + TypeScript SPA (port 3000)
-├── docker/                 # Docker Compose: MySQL 8.0 + Redis 7
-├── milvus-docker/          # REMOVED — Python uses Milvus Lite
+├── hfusionhub-frontend/    # Vue 3 + Vite + TypeScript SPA (dev port 3000, prod port 80)
+├── docker/                 # Dev Docker Compose: MySQL 8.0 + Redis 7 + MinIO + Plugin Runner
+├── deploy/                 # Production Docker Compose, Dockerfiles, Helm chart, monitoring
 ├── scripts/                # PowerShell verification scripts
 └── .github/workflows/      # CI pipeline
 ```
@@ -39,9 +39,6 @@ source .venv/bin/activate   # Linux/macOS
 
 pip install -r requirements.txt              # Install deps (pip-compile locked)
 pip install -r requirements-dev.txt          # Install test deps
-# To update locked dependencies (rebuild locks separately; never compile the two input files together):
-# pip-compile --generate-hashes --allow-unsafe --output-file=requirements.txt requirements.in
-# pip-compile --generate-hashes --allow-unsafe --output-file=requirements-dev.txt requirements-dev.in
 
 python -m app.main                           # Run dev server
 pytest -q tests                              # Run all tests
@@ -56,11 +53,14 @@ npm ci                                        # Install deps (clean)
 npm run dev                                   # Run dev server
 npm run build                                 # Type-check + build
 npm run preview                               # Preview production build
+npx vitest run                                # Run unit tests
+npx playwright test                           # Run E2E tests
 ```
 
 ### Infrastructure
 ```bash
-cd docker && docker compose up -d             # Start MySQL + Redis
+cd docker && docker compose up -d             # Dev: MySQL + Redis + MinIO + Plugin Runner
+docker compose -f deploy/docker-compose.prod.yml up -d  # Production: all 7 services
 ```
 
 ### First Deployment — Admin Setup
@@ -76,10 +76,7 @@ cd java-backend && mvn spring-boot:run
 ```bash
 # Docker Compose validation, Python tests, Java tests (+ Flyway migration),
 # Frontend build + audit, and the Phase-2 offline evaluation gate (eval-offline)
-# run in parallel. eval-offline runs python-ai/scripts/eval_offline.py
-# --fail-on-regression — gate failure or baseline regression blocks the merge.
-# Nightly runtime evaluation runs via .github/workflows/eval-nightly.yml.
-# See docs/CI_GATES.md.
+# run in parallel. See docs/CI_GATES.md.
 ```
 
 ## Architecture Overview
@@ -87,14 +84,14 @@ cd java-backend && mvn spring-boot:run
 ### Three-Tier Communication
 
 ```
-Frontend (Vue 3 :3000)  ──HTTP/SSE──>  Java Backend (:8080)
-                                           │
-                                     HTTP + X-Internal-Token
-                                           │
-                                    Python AI Service (:9000)
+Frontend (Vue 3 :3000 dev / :80 prod) ──HTTP/SSE──> Java Backend (:8080)
+                                                          │
+                                                    HTTP + X-Internal-Token
+                                                          │
+                                                   Python AI Service (:9000)
 ```
 
-- **Frontend** communicates only with Java backend (via Axios). Port 3000 proxies `/api` to `:8080`.
+- **Frontend** communicates only with Java backend (via Axios). Vite proxies `/api` to `:8080`.
 - **Java backend** owns auth (Sa-Token JWT), CRUD (MyBatis Plus + MySQL), file uploads, and SSE streaming. It proxies all AI requests to the Python service.
 - **Python AI service** is the intelligence layer — only accessible internally via `X-Internal-Token` header. All business endpoints except `/health` require this token (HMAC constant-time comparison).
 
@@ -102,66 +99,63 @@ Frontend (Vue 3 :3000)  ──HTTP/SSE──>  Java Backend (:8080)
 
 Standard **Controller → Service → Mapper → Entity** layered architecture under `com.hfusionhub`.
 
-- **Controllers** (7): HealthController, UserController, KnowledgeBaseController, DocumentController, ConversationController (SSE streaming), VectorizationController (callbacks), RagObservabilityController
-- **Services** (5): UserServiceImpl, KnowledgeBaseServiceImpl, DocumentServiceImpl (file upload + vectorization trigger), ConversationServiceImpl (chat + SSE forwarding), VectorizationServiceImpl (index job management)
-- **Entities** (7): User, KnowledgeBase, Document, DocumentChunk, DocumentIndexJob, Conversation, Message — all extend `BaseEntity` (createdAt, updatedAt, deleted logical delete)
+- **Controllers** (25): Auth, User, KnowledgeBase, Document (3), Conversation (2, SSE streaming), Vectorization (2, callbacks), RagObservability, Agent (3: task/approval/status), Admin, Memory, Notification, Plugin, PromptTemplate, PromptTestSet, System, Tenant, FeatureFlag, Health, Metric, MCP
+- **Services** (~25): Matching service layer with interfaces + implementations
+- **Entities** (42): User, KnowledgeBase, Document, DocumentChunk, DocumentIndexJob, Conversation, Message, MemoryEntry, SystemNotice, NoticeRecipient, AgentTask, AgentRun, AgentStep, AgentApproval, AgentStatusEvent, AgentAlertRule, AgentAlertEvent, AgentEvaluationDataset, Plugin, PluginAuditLog, PromptTemplate, PromptTestSet, PromptTestSetRun, FeatureFlag, Tenant, TenantMember, RolePermission, UsageQuota, UsageLedger, DeletionTask, and more — all extend `BaseEntity` (createdAt, updatedAt, deleted logical delete)
 - **Auth**: Sa-Token with JWT. 86400s timeout, 1800s active timeout. All paths except `/user/login`, `/user/register`, `/vectorize/**/callback`, and Swagger docs require login.
-- **AI Client** (`client/AiClient.java`): HTTP calls to Python AI at `localhost:9000` with `X-Internal-Token`. Supports sync chat, SSE streaming, and cancellation.
-- **Scheduler**: `DocumentIndexRecoveryScheduler` recovers stale index jobs (30 min stale threshold, 3 max attempts).
+- **AI Client** (`client/AiClient.java`): HTTP calls to Python AI with `X-Internal-Token`. Supports sync chat, SSE streaming, and cancellation.
+- **Schedulers** (13): DocumentIndexRecovery, DocumentOrphanRecovery, DeletionTaskProcessor, AgentRunRecovery, AgentRunTimeout, AgentApprovalExpiry, AgentStatusEventRetention, PromptTestSetRunRecovery, PromptTestSetRunTimeout, UsageLedgerAggregation, PluginAuditRetention, FeatureFlagSync, TenantQuotaEnforcement
 
 ### Python AI Service (`python-ai/`)
 
 Modular domain organization — the most architecturally complex subproject.
 
 **Agent System** (`app/core/agent/`):
-- `ReactAgent` — ReAct loop: Thought/Action/Observation cycle (max 5 steps), intent classification, RAG retrieval, context compression, self-reflection, source citations
-- `SingleAgentWorkflow` — bounded wrapper with timeout/retry (disabled by default, `RAG_AGENT_WORKFLOW_ENABLED`)
-- `BoundedMultiAgentWorkflow` — runs agent then validates evidence with deterministic critic (disabled by default, `RAG_MULTI_AGENT_ENABLED`)
-- Agent chaining: `get_agent()` factory wraps ReactAgent → SingleAgentWorkflow → BoundedMultiAgentWorkflow
+- `ReactAgent` — ReAct loop: Thought/Action/Observation cycle (max 5 steps)
+- `SingleAgentWorkflow` — bounded wrapper with timeout/retry (disabled by default)
+- `BoundedMultiAgentWorkflow` — agent + evidence critic (disabled by default)
 
-**RAG Engine** (`app/core/rag/`) — ~25 modules:
+**RAG Engine** (`app/core/rag/`) — ~31 modules:
 - `MultiChannelRetriever` orchestrates rewriting → routing → RRF fusion → reranking → postprocessing
-- `QueryRouter` routes to Vector (Milvus), Keyword (BM25), and Graph channels with weighted RRF fusion
-- `IntentClassifier` supports LLM/Rule/Hybrid strategies with caching
-- `QueryDecomposer` splits complex queries into dependency-graph sub-questions
-- `ContextCompressor` extractively compresses to ~60% target ratio
-- `SelfReflector` evaluates answer quality via LLM/Rule/Hybrid strategies
-- `ScopedGraph` — KB-scoped GraphRAG with deterministic entity co-occurrence
-- `Reranker` — optional cross-encoder or lexical second-stage reranking
-- Pattern: Strategy pattern used pervasively (intent classifier, router, reflector, multi-turn). Singletons for retriever, router, config, trace store.
+- `QueryRouter` routes to Vector (Milvus), Keyword (BM25), and Graph channels
+- `IntentClassifier`, `QueryDecomposer`, `ContextCompressor`, `SelfReflector`
+- `ScopedGraph` — KB-scoped GraphRAG; `Reranker` — optional second-stage
 
 **LLM & Embedding** (`app/core/llm/`, `app/core/embedding/`):
-- Abstract `BaseLLM` with `chat()`, `chat_stream()`, `ainvoke()`
-- Implementations: DeepSeek (default), Ollama, Mock
-- Embedding uses DeepSeek or Ollama (DeepSeek has no real embedding API — falls back to random vectors)
+- Abstract `BaseLLM`; implementations: DeepSeek (default), Ollama, Mock
+- Embedding: Ollama (primary) with `EMBEDDING_ALLOW_FALLBACK` guard
 
 **Vector Store** (`app/core/vectorstore/`):
-- Milvus Lite with persistent file `milvus_data.db`
-- 1024-dim FLOAT_VECTOR, COSINE metric, IVF_FLAT index
-- Local `chunks_store.json` fallback
+- Dev: Milvus Lite (`milvus_data.db`)
+- Prod: Milvus standalone/cluster (`VECTOR_STORE_MODE=cluster`, `MILVUS_HOST`/`MILVUS_PORT`)
 
-**Key env feature flags** (all disabled by default, in `.env.example`):
-- `RAG_GRAPH_ENABLED`, `RAG_RERANKER_ENABLED`, `RAG_MULTIMODAL_ENABLED`
-- `RAG_AGENT_WORKFLOW_ENABLED` (P9), `RAG_MULTI_AGENT_ENABLED` (P10)
+**Key env feature flags** (in `.env.example`):
+- `RAG_HYBRID_ENABLED` (default true), `RAG_GRAPH_ENABLED`, `RAG_RERANKER_MODE`
+- `RAG_MULTIMODAL_ENABLED`, `RAG_AGENT_WORKFLOW_ENABLED`, `RAG_MULTI_AGENT_ENABLED`
 
 ### Frontend (`hfusionhub-frontend/`)
 
 Feature-based SPA with Vue 3 + Pinia + Vue Router.
 
-- **API layer** (`src/api/`): Axios instance injects `satoken` header, handles 401 redirect. Modules per domain (user, knowledgeBase, document, conversation, vectorization, rag).
-- **Pages** (8): Login, Register, Dashboard, Knowledge (list/detail/chunks), Document, Chat (list/detail), RAG observability, Profile
-- **Components**: Radix Vue-based UI primitives (button, card, dialog, input, select, badge), MarkdownRenderer (marked + dompurify), ToastContainer
-- **Router**: Auth guard redirects to `/login`. MainLayout for authenticated routes.
+- **API layer** (`src/api/`): Axios with `satoken` header injection, modules for auth, kb, doc, conversation, agent, approval, memory, plugins, promptTemplate, promptTestSet, system, tools, rag
+- **Pages** (13): Login, Register, Dashboard, Knowledge (list/detail/chunks), Document, Chat (list/detail), RAG observability, Agent tasks/approvals, Memory, Plugins (builder/manager), Prompt templates/test sets, Settings (profile/admin), Admin (users/tenants)
+- **Components**: Radix Vue UI primitives, MarkdownRenderer (marked + dompurify), ToastContainer
+- **Router**: Auth guard → `/login`. MainLayout for authenticated routes.
 
 ### Database
 
-MySQL with MyBatis Plus. Key tables:
-- `sys_user`, `knowledge_base`, `document`, `document_chunk`, `document_index_job`
-- `conversation`, `message` (with JSON `sources` field and `token_count`)
+MySQL 8.0 with MyBatis Plus + Flyway (V1–V35). Key tables:
+- Core: `sys_user`, `knowledge_base`, `document`, `document_chunk`, `document_index_job`
+- Conversation: `conversation`, `message` (JSON `sources`, `token_count`)
+- Agent: `agent_task`, `agent_run`, `agent_step`, `agent_approval`, `agent_status_event`
+- Memory/Notice: `memory_entry`, `system_notice`, `notice_recipient`
+- Plugin: `plugin`, `plugin_audit_log`, `plugin_image_digest`
+- Prompt: `prompt_template`, `prompt_test_set`, `prompt_test_set_run`
+- Tenant: `tenant`, `tenant_member`, `role_permission`, `usage_quota`, `usage_ledger`
+- Feature flags: `feature_flag`
 - Logical delete via `deleted` column on all major tables
-- Admin user is created via `ADMIN_PASSWORD` env var (no default password)
-- Flyway migrations at `java-backend/src/main/resources/db/migration/`
-- Legacy SQL scripts at `java-backend/src/main/resources/sql/`
+- Admin: created via `ADMIN_PASSWORD` env var by `AdminInitializer`
+- Flyway: `java-backend/src/main/resources/db/migration/` (V1–V35; new scripts must be V36+)
 
 ## Key Data Flows
 
@@ -182,9 +176,9 @@ MySQL with MyBatis Plus. Key tables:
 
 | Subproject | Runner | Test count | Location |
 |---|---|---|---|
-| python-ai | pytest + pytest-asyncio | 615+ test cases across 27 files | `python-ai/tests/` |
-| java-backend | JUnit 5 + H2 (spring-boot-starter-test) | 4 tests | `java-backend/src/test/` |
-| frontend | npm audit only (no test framework) | — | — |
+| python-ai | pytest + pytest-asyncio | 1220+ test cases across 27+ files | `python-ai/tests/` |
+| java-backend | JUnit 5 + H2 (spring-boot-starter-test) | 397 tests | `java-backend/src/test/` |
+| frontend | Vitest + Playwright | 32 unit + E2E | `hfusionhub-frontend/src/__tests__/` |
 
 Java tests use H2 in-memory database (MySQL compatibility mode) via the `test` Spring profile.
 Flyway is disabled in tests; schema is loaded from `src/test/resources/schema-h2.sql`.
@@ -192,13 +186,9 @@ For full integration tests against real MySQL, use the `itest` Maven profile (`m
 
 ## Design Patterns
 
-- **Strategy pattern**: Intent classifier, self-reflector, query router, multi-turn strategy all use strategy pattern with factory creation
+- **Strategy pattern**: Intent classifier, self-reflector, query router, multi-turn strategy — all with factory creation
 - **Singleton**: Global instances for retriever, config, trace store, knowledge graph manager, reflector
-- **Fallback chains**: Embedding (Ollama → DeepSeek → random), Reranker (cross_encoder → lexical → disabled)
+- **Fallback chains**: Embedding (Ollama → fail closed; random only with `EMBEDDING_ALLOW_FALLBACK=true`)
 - **CQRS-like**: Java owns write path (documents, conversations), Python owns read/retrieval path
 - **Idempotent indexing**: `document_index_job.index_version` prevents duplicate processing
 - **Defense in depth**: KB ownership verified at Java (Sa-Token) and Python (callback secrets)
-
-## Claude Code 会话记忆
-
-当需要了解该项目在此前的 Claude Code 会话中讨论过的问题、已完成的修复或决策时，读取 `CLAUDE_MEMORY.md`（精简提取版，约 48KB）。该文件由脚本从 `~/.claude/projects/d--college-development-0-HFusionHub/*.jsonl` 会话记录自动提取，仅含有效用户提问与 AI 回答。原始完整版为 `CLAUDE_SESSIONS_MEMORY.md`（约 2MB，含工具调用细节，非必要不读取）。如需重新生成：运行 `python C:\Users\15790\AppData\Local\Temp\opencode\extract_claude_sessions.py`。
