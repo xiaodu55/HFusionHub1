@@ -1,7 +1,21 @@
-﻿$env:DB_USERNAME="root"
-$env:DB_PASSWORD="46124b69e5304874b5a6773b736d6f63"
-$env:CALLBACK_SECRET="40cca2901f7140e4a45257ecd1b70cd0"
-$env:PYTHON_AI_INTERNAL_TOKEN="d12f9dfb93954ee39d5eebb301b38925"
-$env:ADMIN_PASSWORD="Admin1234"
-Set-Location "D:\college\development\0\HFusionHub\java-backend"
-mvn spring-boot:run 2>&1 | Tee-Object -FilePath "D:\college\development\0\HFusionHub\java-backend\server_new.log"
+$ErrorActionPreference = "Stop"
+
+$required = @(
+    "DB_USERNAME",
+    "DB_PASSWORD",
+    "CALLBACK_SECRET",
+    "PYTHON_AI_INTERNAL_TOKEN",
+    "ADMIN_PASSWORD"
+)
+$missing = @($required | Where-Object {
+    $value = (Get-Item "Env:$_" -ErrorAction SilentlyContinue).Value
+    [string]::IsNullOrWhiteSpace($value)
+})
+if ($missing.Count -gt 0) {
+    throw "Missing required environment variables: $($missing -join ', ')"
+}
+
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Set-Location $repoRoot
+$logPath = Join-Path $PSScriptRoot "server_new.log"
+& mvn -f "java-backend/pom.xml" spring-boot:run 2>&1 | Tee-Object -FilePath $logPath
