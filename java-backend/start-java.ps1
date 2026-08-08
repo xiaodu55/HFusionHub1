@@ -1,9 +1,19 @@
-﻿$env:CALLBACK_SECRET = "40cca2901f7140e4a45257ecd1b70cd0"
-$env:PYTHON_AI_INTERNAL_TOKEN = "d12f9dfb93954ee39d5eebb301b38925"
-$env:ADMIN_PASSWORD = "Admin1234"
-$env:SPRING_DATASOURCE_URL = "jdbc:mysql://127.0.0.1:3306/hfusionhub?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
-$env:DB_USERNAME = "root"
-$env:DB_PASSWORD = "46124b69e5304874b5a6773b736d6f63"
-$env:SPRING_DATA_REDIS_HOST = "127.0.0.1"
-Set-Location "D:\college\development\0\HFusionHub\java-backend"
-& mvn "spring-boot:run"
+$ErrorActionPreference = "Stop"
+
+$required = @(
+    "DB_USERNAME",
+    "DB_PASSWORD",
+    "CALLBACK_SECRET",
+    "PYTHON_AI_INTERNAL_TOKEN",
+    "ADMIN_PASSWORD"
+)
+$missing = @($required | Where-Object {
+    $value = (Get-Item "Env:$_" -ErrorAction SilentlyContinue).Value
+    [string]::IsNullOrWhiteSpace($value)
+})
+if ($missing.Count -gt 0) {
+    throw "Missing required environment variables: $($missing -join ', ')"
+}
+
+Set-Location (Join-Path $PSScriptRoot "..")
+& mvn -f "java-backend/pom.xml" spring-boot:run
