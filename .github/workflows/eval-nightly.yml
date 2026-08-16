@@ -49,7 +49,7 @@ jobs:
             exit 1
           fi
       - name: Restore runtime baseline (most recent version)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: python-ai/evaluation/baseline/runtime_baseline.json
           key: runtime-baseline-${{ hashFiles('python-ai/evaluation/suite/cases.jsonl') }}-${{ github.run_id }}
@@ -64,7 +64,7 @@ jobs:
           UPDATE_BASELINE: ${{ github.event.inputs.update_baseline == 'true' }}
       - name: Persist re-frozen runtime baseline
         if: ${{ success() && github.event.inputs.update_baseline == 'true' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: python-ai/evaluation/baseline/runtime_baseline.json
           key: runtime-baseline-${{ hashFiles('python-ai/evaluation/suite/cases.jsonl') }}-${{ github.run_id }}
