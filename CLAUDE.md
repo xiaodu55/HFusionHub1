@@ -11,7 +11,7 @@ HFusionHub/
 ├── java-backend/           # Spring Boot 3.2.5 backend (port 8080, /api context-path)
 ├── python-ai/              # FastAPI AI service (port 9000)
 ├── hfusionhub-frontend/    # Vue 3 + Vite + TypeScript SPA (dev port 3000, prod port 80)
-├── docker/                 # Dev Docker Compose: MySQL 8.0 + Redis 7 + MinIO + Plugin Runner
+├── docker/                 # Dev Docker Compose: MySQL + Redis + MinIO + Milvus/etcd/Attu + Plugin Runner
 ├── deploy/                 # Production Docker Compose, Dockerfiles, Helm chart, monitoring
 ├── scripts/                # PowerShell verification scripts
 └── .github/workflows/      # CI pipeline
@@ -58,7 +58,7 @@ npx playwright test                           # Run E2E tests
 
 ### Infrastructure
 ```bash
-cd docker && docker compose up -d             # Dev: MySQL + Redis + MinIO + Plugin Runner
+cd docker && docker compose up -d             # Dev: MySQL + Redis + MinIO + Milvus/etcd/Attu + Plugin Runner
 docker compose -f deploy/docker-compose.prod.yml up -d  # Production: all 7 services
 ```
 
@@ -104,7 +104,7 @@ Frontend (Vue 3 :3000 dev / :80 prod) ──HTTP/SSE──> Java Backend (:8080)
 - **Agent System**: `ReactAgent` (ReAct loop, max 5 steps), `SingleAgentWorkflow`, `BoundedMultiAgentWorkflow`
 - **RAG Engine** (~31 modules): MultiChannelRetriever, QueryRouter, IntentClassifier, QueryDecomposer, ContextCompressor, SelfReflector, ScopedGraph, Reranker
 - **LLM**: Abstract `BaseLLM`; implementations: DeepSeek (default), Ollama, Mock
-- **Vector Store**: Milvus Lite (dev) / Milvus Standalone cluster (prod, `VECTOR_STORE_MODE=cluster`)
+- **Vector Store**: Milvus Standalone + external etcd（默认/生产, `VECTOR_STORE_MODE=cluster`）; Milvus Lite 仅本地裸跑/测试可选
 - **Feature flags**: `RAG_HYBRID_ENABLED` (default true), `RAG_GRAPH_ENABLED`, `RAG_RERANKER_MODE`, `RAG_MULTIMODAL_ENABLED`, `RAG_AGENT_WORKFLOW_ENABLED`, `RAG_MULTI_AGENT_ENABLED`
 
 ### Frontend (`hfusionhub-frontend/`)
@@ -142,7 +142,7 @@ MySQL 8.0 with MyBatis Plus + Flyway (V1–V35). Key tables:
 | Subproject | Runner | Test count |
 |---|---|---|
 | python-ai | pytest + pytest-asyncio | 1220+ |
-| java-backend | JUnit 5 + H2 | 397 |
+| java-backend | JUnit 5 + H2 | 423 |
 | frontend | Vitest + Playwright | 32 unit + E2E |
 
 Java tests use H2 in-memory (MySQL compatibility mode). Flyway disabled in tests; schema from `schema-h2.sql`.
@@ -157,8 +157,7 @@ Java tests use H2 in-memory (MySQL compatibility mode). Flyway disabled in tests
 ## Project Docs
 
 - [README.md](README.md) — 项目总览与快速开始
-- [docs/启动重启1.md](docs/启动重启1.md) — 中文启动指南
-- [docs/startup-guide.md](docs/startup-guide.md) — English startup guide
+- [docs/startup-guide.md](docs/startup-guide.md) — 中英双语启动/重启/排障指南（原 启动重启1.md 已合并）
 - [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) — 环境变量清单
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 架构全景图
 - [docs/java-backend.md](docs/java-backend.md) — Java 后端开发指南
