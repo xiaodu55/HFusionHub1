@@ -11,7 +11,7 @@ HFusionHub/
 ├── java-backend/           # Spring Boot 3.2.5 backend (port 8080, /api context-path)
 ├── python-ai/              # FastAPI AI service (port 9000)
 ├── hfusionhub-frontend/    # Vue 3 + Vite + TypeScript SPA (dev port 3000, prod port 80)
-├── docker/                 # Dev Docker Compose: MySQL 8.0 + Redis 7 + MinIO + Plugin Runner
+├── docker/                 # Dev Docker Compose: MySQL + Redis + MinIO + Milvus/etcd/Attu + Plugin Runner
 ├── deploy/                 # Production Docker Compose, Dockerfiles, Helm chart, monitoring
 ├── scripts/                # PowerShell verification scripts
 └── .github/workflows/      # CI pipeline
@@ -126,8 +126,8 @@ Modular domain organization — the most architecturally complex subproject.
 - Embedding: Ollama (primary) with `EMBEDDING_ALLOW_FALLBACK` guard
 
 **Vector Store** (`app/core/vectorstore/`):
-- Dev: Milvus Lite (`milvus_data.db`)
-- Prod: Milvus standalone/cluster (`VECTOR_STORE_MODE=cluster`, `MILVUS_HOST`/`MILVUS_PORT`)
+- Default (Docker/prod): Milvus Standalone + external etcd (`VECTOR_STORE_MODE=cluster`, `MILVUS_HOST`/`MILVUS_PORT`); Attu console on :8000
+- Optional: Milvus Lite embedded file (`VECTOR_STORE_MODE=lite`, local bare-metal runs / tests only)
 
 **Key env feature flags** (in `.env.example`):
 - `RAG_HYBRID_ENABLED` (default true), `RAG_GRAPH_ENABLED`, `RAG_RERANKER_MODE`
@@ -177,7 +177,7 @@ MySQL 8.0 with MyBatis Plus + Flyway (V1–V35). Key tables:
 | Subproject | Runner | Test count | Location |
 |---|---|---|---|
 | python-ai | pytest + pytest-asyncio | 1220+ test cases across 27+ files | `python-ai/tests/` |
-| java-backend | JUnit 5 + H2 (spring-boot-starter-test) | 397 tests | `java-backend/src/test/` |
+| java-backend | JUnit 5 + H2 (spring-boot-starter-test) | 423 tests | `java-backend/src/test/` |
 | frontend | Vitest + Playwright | 32 unit + E2E | `hfusionhub-frontend/src/__tests__/` |
 
 Java tests use H2 in-memory database (MySQL compatibility mode) via the `test` Spring profile.
