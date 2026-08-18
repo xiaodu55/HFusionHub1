@@ -144,7 +144,7 @@ Feature-based SPA with Vue 3 + Pinia + Vue Router.
 
 ### Database
 
-MySQL 8.0 with MyBatis Plus + Flyway (V1–V35). Key tables:
+MySQL 8.0 with MyBatis Plus + Flyway (V1–V56). Key tables:
 - Core: `sys_user`, `knowledge_base`, `document`, `document_chunk`, `document_index_job`
 - Conversation: `conversation`, `message` (JSON `sources`, `token_count`)
 - Agent: `agent_task`, `agent_run`, `agent_step`, `agent_approval`, `agent_status_event`
@@ -152,10 +152,12 @@ MySQL 8.0 with MyBatis Plus + Flyway (V1–V35). Key tables:
 - Plugin: `plugin`, `plugin_audit_log`, `plugin_image_digest`
 - Prompt: `prompt_template`, `prompt_test_set`, `prompt_test_set_run`
 - Tenant: `tenant`, `tenant_member`, `role_permission`, `usage_quota`, `usage_ledger`
+- Cost/Notes: `model_usage_record`, `note` (写笔记闭环), `kb_share`, `app`/`app_api_key`/`app_call_log`
+- Audit: `audit_log`, `tenant_audit_log`
 - Feature flags: `feature_flag`
 - Logical delete via `deleted` column on all major tables
 - Admin: created via `ADMIN_PASSWORD` env var by `AdminInitializer`
-- Flyway: `java-backend/src/main/resources/db/migration/` (V1–V35; new scripts must be V36+)
+- Flyway: `java-backend/src/main/resources/db/migration/` (V1–V56; new scripts must be V57+; **new tables MUST include `tenant_id`** unless added to `TENANT_IGNORE_TABLES` — CI `scripts/static-checks.py` enforces this)
 
 ## Key Data Flows
 
