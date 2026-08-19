@@ -115,14 +115,14 @@ Frontend (Vue 3 :3000 dev / :80 prod) ──HTTP/SSE──> Java Backend (:8080)
 
 ### Database
 
-MySQL 8.0 with MyBatis Plus + Flyway (V1–V56). Key tables:
+MySQL 8.0 with MyBatis Plus + Flyway (V1–V57). Key tables:
 - Core: `sys_user`, `knowledge_base`, `document`, `document_chunk`, `document_index_job`
 - Conversation: `conversation`, `message` (JSON `sources`, `token_count`)
 - Agent: `agent_task`, `agent_run`, `agent_step`, `agent_approval`, `agent_status_event`
 - Plugin: `plugin`, `plugin_audit_log`; Prompt: `prompt_template`, `prompt_test_set`
 - Tenant: `tenant`, `tenant_member`, `role_permission`, `usage_quota`, `usage_ledger`
 - Cost/Notes: `model_usage_record`, `note` (写笔记闭环), `kb_share`, `app`/`app_api_key`
-- Flyway: new schema changes must use **V57+** scripts. Never modify existing V1–V56.
+- Flyway: new schema changes must use **V58+** scripts. Never modify existing V1–V57.
 - **新表必须含 `tenant_id` 列**（除非加入 `MybatisPlusConfig.TENANT_IGNORE_TABLES`）；CI `scripts/static-checks.py` 静态校验
 
 ## Key Data Flows
@@ -144,8 +144,8 @@ MySQL 8.0 with MyBatis Plus + Flyway (V1–V56). Key tables:
 | Subproject | Runner | Test count |
 |---|---|---|
 | python-ai | pytest + pytest-asyncio | 1220+ |
-| java-backend | JUnit 5 + H2 | 423 |
-| frontend | Vitest + Playwright | 32 unit + E2E |
+| java-backend | JUnit 5 + H2 | 445 |
+| frontend | Vitest + Playwright | 33 unit + E2E |
 
 Java tests use H2 in-memory (MySQL compatibility mode). Flyway disabled in tests; schema from `schema-h2.sql`.
 
@@ -158,10 +158,15 @@ Java tests use H2 in-memory (MySQL compatibility mode). Flyway disabled in tests
 
 ## Project Docs
 
+> 完整文档索引见 [README.md](README.md#-文档索引documentation-index)（含每个 `docs/` 文件的作用说明）。
+
 - [README.md](README.md) — 项目总览与快速开始
 - [docs/startup-guide.md](docs/startup-guide.md) — 中英双语启动/重启/排障指南（原 启动重启1.md 已合并）
-- [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) — 环境变量清单
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 架构全景图
+- [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) — 环境变量清单（唯一权威）
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 架构全景图（含白皮书）
+- [docs/PRODUCTION_OPS.md](docs/PRODUCTION_OPS.md) — 生产运维手册（含上线检查清单 + 向量库容灾）
+- [docs/SCALING.md](docs/SCALING.md) — 扩容与性能手册（含性能基线）
+- [docs/ROADMAP.md](docs/ROADMAP.md) — 路线图（含评估快照）
 - [docs/java-backend.md](docs/java-backend.md) — Java 后端开发指南
 - [docs/python-ai.md](docs/python-ai.md) — Python AI 开发指南
 - [docs/database.md](docs/database.md) — 数据库设计
