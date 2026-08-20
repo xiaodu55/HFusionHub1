@@ -161,6 +161,7 @@ Java tests use H2 in-memory (MySQL compatibility mode). Flyway disabled in tests
 > 完整文档索引见 [README.md](README.md#-文档索引documentation-index)（含每个 `docs/` 文件的作用说明）。
 
 - [README.md](README.md) — 项目总览与快速开始
+- [docs/ACCESS_MAP.md](docs/ACCESS_MAP.md) — 已启动服务全量访问地图（网址/账号/API 文档/接口清单）
 - [docs/startup-guide.md](docs/startup-guide.md) — 中英双语启动/重启/排障指南（原 启动重启1.md 已合并）
 - [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) — 环境变量清单（唯一权威）
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 架构全景图（含白皮书）
