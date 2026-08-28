@@ -7,7 +7,7 @@
 
 - **Architecture**: Java + Python hybrid three-tier (see [CLAUDE.md](CLAUDE.md) → Architecture Overview). Java owns writes (ACID), Python owns reads/intelligence.
 - **Flyway**: current `V1–V74`; new scripts must be **V75+**. Never modify existing migrations. New tables MUST include `tenant_id` (unless in `TENANT_IGNORE_TABLES`).
-- **Tests**: Java 554 · Python 1380+ · Frontend 33.
+- **Tests**: Java 554 · Python 1380+ · Frontend 45.
 - **Commands, data flows, design patterns, project docs**: all in [CLAUDE.md](CLAUDE.md).
 
 ## Agent-Specific Notes
@@ -19,7 +19,7 @@
 
 ### Implementation rules
 
-- **Schema changes**: create a new Flyway `V74+` script; never touch V1–V73. Always add `tenant_id` to new tables.
+- **Schema changes**: create a new Flyway `V75+` script; never touch V1–V74. Always add `tenant_id` to new tables.
 - **Internal endpoints** (Java ↔ Python): must be protected by `X-Internal-Token` / `CALLBACK_SECRET`; keep the token key names consistent (see `scripts/static-checks.py`, enforced in CI).
 - **Feature flags**: gate new AI capabilities behind env-var flags (see [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) — P5 stable ON, experimental default OFF, frozen flags stay OFF).
 - **Don't hardcode secrets**: read from `docker/.env` / `deploy/.env` / env vars; never commit `.env` or plaintext passwords.
