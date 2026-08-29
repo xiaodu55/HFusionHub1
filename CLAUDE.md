@@ -40,7 +40,7 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 
 python -m app.main                           # Run dev server
-pytest -q tests                              # Run all tests (~1380)
+pytest -q tests                              # Run all tests (~1340)
 pytest -q tests/test_retriever.py            # Run single test file
 pytest -q -k "test_intent_classify"          # Run specific test
 ```
@@ -115,14 +115,14 @@ Frontend (Vue 3 :3000 dev / :80 prod) ──HTTP/SSE──> Java Backend (:8080)
 
 ### Database
 
-MySQL 8.0 with MyBatis Plus + Flyway (V1–V74). Key tables:
+MySQL 8.0 with MyBatis Plus + Flyway (V1–V75). Key tables:
 - Core: `sys_user`, `knowledge_base`, `document`, `document_chunk`, `document_index_job`
 - Conversation: `conversation`, `message` (JSON `sources`, `token_count`)
 - Agent: `agent_task`, `agent_run`, `agent_step`, `agent_approval`, `agent_status_event`
 - Plugin: `plugin`, `plugin_audit_log`; Prompt: `prompt_template`, `prompt_test_set`
 - Tenant: `tenant`, `tenant_member`, `role_permission`, `usage_quota`, `usage_ledger`
 - Cost/Notes: `model_usage_record`, `note` (写笔记闭环), `kb_share`, `app`/`app_api_key`
-- Flyway: new schema changes must use **V75+** scripts. Never modify existing V1–V74.
+- Flyway: new schema changes must use **V76+** scripts. Never modify existing V1–V75.
 - **新表必须含 `tenant_id` 列**（除非加入 `MybatisPlusConfig.TENANT_IGNORE_TABLES`）；CI `scripts/static-checks.py` 静态校验
 
 ## Key Data Flows
@@ -143,7 +143,7 @@ MySQL 8.0 with MyBatis Plus + Flyway (V1–V74). Key tables:
 
 | Subproject | Runner | Test count |
 |---|---|---|
-| python-ai | pytest + pytest-asyncio | 1380+ |
+| python-ai | pytest + pytest-asyncio | 1339+8 |
 | java-backend | JUnit 5 + H2 | 554 |
 | frontend | Vitest + Playwright | 33 unit + E2E |
 
