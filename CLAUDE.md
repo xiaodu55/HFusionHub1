@@ -40,7 +40,7 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 
 python -m app.main                           # Run dev server
-pytest -q tests                              # Run all tests (~1340)
+pytest -q tests                              # Run all tests (~1290 collected / 1247 test functions)
 pytest -q tests/test_retriever.py            # Run single test file
 pytest -q -k "test_intent_classify"          # Run specific test
 ```
@@ -143,9 +143,9 @@ MySQL 8.0 with MyBatis Plus + Flyway (V1–V76). Key tables:
 
 | Subproject | Runner | Test count |
 |---|---|---|
-| python-ai | pytest + pytest-asyncio | 1339+8 |
-| java-backend | JUnit 5 + H2 | 554 |
-| frontend | Vitest + Playwright | 33 unit + E2E |
+| python-ai | pytest + pytest-asyncio | 1247 |
+| java-backend | JUnit 5 + H2 | 567 |
+| frontend | Vitest + Playwright | 49 unit + 74 E2E |
 
 Java tests use H2 in-memory (MySQL compatibility mode). Flyway disabled in tests; schema from `schema-h2.sql`.
 
