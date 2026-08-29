@@ -6,8 +6,8 @@
 ## TL;DR
 
 - **Architecture**: Java + Python hybrid three-tier (see [CLAUDE.md](CLAUDE.md) → Architecture Overview). Java owns writes (ACID), Python owns reads/intelligence.
-- **Flyway**: current `V1–V75`; new scripts must be **V76+**. Never modify existing migrations. New tables MUST include `tenant_id` (unless in `TENANT_IGNORE_TABLES`).
-- **Tests**: Java 564 · Python 1339 · Frontend 49.
+- **Flyway**: current `V1–V76`; new scripts must be **V77+**. Never modify existing migrations. New tables MUST include `tenant_id` (unless in `TENANT_IGNORE_TABLES`).
+- **Tests**: Java 562 · Python 1339 · Frontend 49.
 - **Commands, data flows, design patterns, project docs**: all in [CLAUDE.md](CLAUDE.md).
 
 ## Agent-Specific Notes
@@ -19,7 +19,7 @@
 
 ### Implementation rules
 
-- **Schema changes**: create a new Flyway `V76+` script; never touch V1–V75. Always add `tenant_id` to new tables.
+- **Schema changes**: create a new Flyway `V77+` script; never touch V1–V76. Always add `tenant_id` to new tables.
 - **Internal endpoints** (Java ↔ Python): must be protected by `X-Internal-Token` / `CALLBACK_SECRET`; keep the token key names consistent (see `scripts/static-checks.py`, enforced in CI).
 - **Feature flags**: gate new AI capabilities behind env-var flags (see [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) — P5 stable ON, experimental default OFF, frozen flags stay OFF).
 - **Don't hardcode secrets**: read from `docker/.env` / `deploy/.env` / env vars; never commit `.env` or plaintext passwords.
@@ -29,7 +29,7 @@
 - Java: `cd java-backend && mvn test`
 - Python: `cd python-ai && .venv\Scripts\activate && pytest -q tests`
 - Frontend: `cd hfusionhub-frontend && npm run build && npx vitest run`
-- Full stack: `.\scripts\smoke-test.ps1` (expect 47 PASS / 0 FAIL)
+- Full stack: `.\scripts\smoke-test.ps1` (expect 48 PASS / 0 FAIL)
 - Static consistency: `python scripts/static-checks.py`
 
 ### CI gates
