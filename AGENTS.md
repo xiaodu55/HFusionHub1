@@ -7,7 +7,7 @@
 
 - **Architecture**: Java + Python hybrid three-tier (see [CLAUDE.md](CLAUDE.md) → Architecture Overview). Java owns writes (ACID), Python owns reads/intelligence.
 - **Flyway**: current `V1–V78`; new scripts must be **V79+**. Never modify existing migrations. New tables MUST include `tenant_id` (unless in `TENANT_IGNORE_TABLES`).
-- **Tests**: Java 572 · Python 1248 · Frontend 49 (unit) + 74 (E2E). `scripts/static-checks.py --test-counts` enforces doc/code sync.
+- **Tests**: Java 572 · Python 1258 · Frontend 49 (unit) + 74 (E2E). `scripts/static-checks.py --test-counts` enforces doc/code sync.
 - **Commands, data flows, design patterns, project docs**: all in [CLAUDE.md](CLAUDE.md).
 
 ## Agent-Specific Notes
