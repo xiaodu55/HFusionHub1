@@ -8,7 +8,7 @@ HFusionHub is a **three-tier monorepo** enterprise AI Agent platform with a Java
 
 ```
 HFusionHub/
-├── java-backend/           # Spring Boot 3.2.5 backend (port 8080, /api context-path)
+├── java-backend/           # Spring Boot 3.5.16 backend (port 8080, /api context-path)
 ├── python-ai/              # FastAPI AI service (port 9000)
 ├── hfusionhub-frontend/    # Vue 3 + Vite + TypeScript SPA (dev port 3000, prod port 80)
 ├── docker/                 # Dev Docker Compose: MySQL + Redis + MinIO + Milvus/etcd/Attu + Plugin Runner
@@ -40,8 +40,8 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 
 python -m app.main                           # Run dev server
-pytest -q tests                              # Run all tests (~1290 collected / 1247 test functions)
-pytest -q tests/test_retriever.py            # Run single test file
+pytest -q tests                              # Run all tests (1381 test functions)
+pytest -q tests/test_adaptive_retrieval.py   # Run single test file
 pytest -q -k "test_intent_classify"          # Run specific test
 ```
 
@@ -94,7 +94,7 @@ Frontend (Vue 3 :3000 dev / :80 prod) ──HTTP/SSE──> Java Backend (:8080)
 
 ### Java Backend (`java-backend/`)
 
-- **Controllers** (25), **Services** (~25), **Entities** (42) — all under `com.hfusionhub`
+- **Controllers** (53, 含 `bot/` 下 3 个 IM bot 控制器), **Services** (40 接口 + 3 独立 `@Service` 类), **Entities** (64 `@TableName` 实体 + 1 抽象基类) — all under `com.hfusionhub`
 - **Auth**: Sa-Token with JWT. 86400s timeout, 1800s active timeout.
 - **AI Client** (`client/AiClient.java`): HTTP → Python AI with `X-Internal-Token`. Sync chat, SSE streaming, cancellation.
 - **Schedulers** (13): DocumentIndexRecovery, DeletionTaskProcessor, AgentRunRecovery, AgentRunTimeout, FeatureFlagSync, UsageLedgerAggregation, and others.
@@ -110,19 +110,19 @@ Frontend (Vue 3 :3000 dev / :80 prod) ──HTTP/SSE──> Java Backend (:8080)
 ### Frontend (`hfusionhub-frontend/`)
 
 - Vue 3 + Pinia + Vue Router + Radix Vue + Tailwind CSS 4
-- **API layer**: Axios with `satoken` header injection; 13+ API modules
-- **Pages** (13): Login, Register, Dashboard, Knowledge, Document, Chat, RAG observability, Agent, Memory, Plugins, Prompt, Settings, Admin
+- **API layer**: Axios with `satoken` header injection; 31 API modules
+- **Pages** (43 routes across 17 business groups): Login, Register, Dashboard, Knowledge, Document, Chat, RAG observability, Agent, Memory, Plugins, Prompt, Settings, Admin, Builder, Bid, Cost, Embed, Notes, Profile 等
 
 ### Database
 
-MySQL 8.0 with MyBatis Plus + Flyway (V1–V80). Key tables:
+MySQL 8.0 with MyBatis Plus + Flyway (V1–V81). Key tables:
 - Core: `sys_user`, `knowledge_base`, `document`, `document_chunk`, `document_index_job`
 - Conversation: `conversation`, `message` (JSON `sources`, `token_count`)
 - Agent: `agent_task`, `agent_run`, `agent_step`, `agent_approval`, `agent_status_event`
 - Plugin: `plugin`, `plugin_audit_log`; Prompt: `prompt_template`, `prompt_test_set`
 - Tenant: `tenant`, `tenant_member`, `role_permission`, `usage_quota`, `usage_ledger`
 - Cost/Notes: `model_usage_record`, `note` (写笔记闭环), `kb_share`, `app`/`app_api_key`
-- Flyway: new schema changes must use **V81+** scripts. Never modify existing V1–V80.
+- Flyway: new schema changes must use **V82+** scripts. Never modify existing V1–V81.
 - **新表必须含 `tenant_id` 列**（除非加入 `MybatisPlusConfig.TENANT_IGNORE_TABLES`）；CI `scripts/static-checks.py` 静态校验
 
 ## Key Data Flows
@@ -143,9 +143,9 @@ MySQL 8.0 with MyBatis Plus + Flyway (V1–V80). Key tables:
 
 | Subproject | Runner | Test count |
 |---|---|---|
-| python-ai | pytest + pytest-asyncio | 1247 |
-| java-backend | JUnit 5 + H2 | 567 |
-| frontend | Vitest + Playwright | 49 unit + 74 E2E |
+| python-ai | pytest + pytest-asyncio | 1381 |
+| java-backend | JUnit 5 + H2 | 665 |
+| frontend | Vitest + Playwright | 49 unit + 73 E2E |
 
 Java tests use H2 in-memory (MySQL compatibility mode). Flyway disabled in tests; schema from `schema-h2.sql`.
 
