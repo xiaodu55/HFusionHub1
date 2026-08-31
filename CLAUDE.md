@@ -144,7 +144,7 @@ MySQL 8.0 with MyBatis Plus + Flyway (V1–V82). Key tables:
 | Subproject | Runner | Test count |
 |---|---|---|
 | python-ai | pytest + pytest-asyncio | 1381 |
-| java-backend | JUnit 5 + H2 | 680 |
+| java-backend | JUnit 5 + H2 | 689 |
 | frontend | Vitest + Playwright | 49 unit + 73 E2E |
 
 Java tests use H2 in-memory (MySQL compatibility mode). Flyway disabled in tests; schema from `schema-h2.sql`.
