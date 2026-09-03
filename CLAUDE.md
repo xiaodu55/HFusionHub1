@@ -94,7 +94,7 @@ Frontend (Vue 3 :3000 dev / :80 prod) ──HTTP/SSE──> Java Backend (:8080)
 
 ### Java Backend (`java-backend/`)
 
-- **Controllers** (53, 含 `bot/` 下 3 个 IM bot 控制器), **Services** (40 接口 + 3 独立 `@Service` 类), **Entities** (64 `@TableName` 实体 + 1 抽象基类) — all under `com.hfusionhub`
+- **Controllers** (55, 含 `bot/` 下 3 个 IM bot 控制器), **Services** (41 接口 + 4 独立 `@Service` 类), **Entities** (71 `@TableName` 实体 + 1 抽象基类) — all under `com.hfusionhub`
 - **Auth**: Sa-Token with JWT. 86400s timeout, 1800s active timeout.
 - **AI Client** (`client/AiClient.java`): HTTP → Python AI with `X-Internal-Token`. Sync chat, SSE streaming, cancellation.
 - **Schedulers** (13): DocumentIndexRecovery, DeletionTaskProcessor, AgentRunRecovery, AgentRunTimeout, FeatureFlagSync, UsageLedgerAggregation, and others.
