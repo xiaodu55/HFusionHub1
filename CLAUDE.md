@@ -40,7 +40,7 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 
 python -m app.main                           # Run dev server
-pytest -q tests                              # Run all tests (1409 test functions)
+pytest -q tests                              # Run all tests (1411 test functions)
 pytest -q tests/test_adaptive_retrieval.py   # Run single test file
 pytest -q -k "test_intent_classify"          # Run specific test
 ```
@@ -143,7 +143,7 @@ MySQL 8.0 with MyBatis Plus + Flyway (V1–V83). Key tables:
 
 | Subproject | Runner | Test count |
 |---|---|---|
-| python-ai | pytest + pytest-asyncio | 1409 |
+| python-ai | pytest + pytest-asyncio | 1411 |
 | java-backend | JUnit 5 + H2 | 693 |
 | frontend | Vitest + Playwright | 49 unit + 73 E2E |
 
