@@ -2,7 +2,7 @@
 # Rebuild lock separately: pip-compile --generate-hashes --allow-unsafe --output-file=requirements.txt requirements.in
 
 fastapi>=0.141.1
-uvicorn[standard]>=0.27.0
+uvicorn[standard]>=0.52.4
 pydantic>=2.13.5
 python-dotenv>=1.0.1
 loguru>=0.7.3
