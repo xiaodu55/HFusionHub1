@@ -63,7 +63,7 @@
         <dependency>
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>
-            <version>8.1</version>
+            <version>9.0</version>
         </dependency>
         <!-- 分布式追踪（默认关，TRACING_ENABLED=true 开启）：micrometer-tracing
              经 RestTemplate/WebClient 观测自动向 Python 传播 traceparent -->
