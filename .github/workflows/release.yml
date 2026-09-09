@@ -38,7 +38,7 @@ jobs:
 
       # 4 个服务镜像：Java / Python / Plugin Runner / Frontend
       - name: Build & push Java image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: java-backend
           file: deploy/Dockerfile.java
@@ -50,7 +50,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build & push Python AI image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: python-ai
           file: deploy/Dockerfile.python
@@ -62,7 +62,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build & push Plugin Runner image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile.plugin-runner
@@ -74,7 +74,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build & push Frontend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/Dockerfile.frontend
